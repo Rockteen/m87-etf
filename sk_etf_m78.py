@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-【ETF M78-Alpha 决策支持系统】
+import os
+import json
+import datetime
+import argparse
+import pandas as pd
+import akshare as ak
 
-在当前目录下创建一个名为 `current_portfolio.md` 的文件，模板如下：
-
-# 当前持仓状态
+TEMPLATE_MD = """# 当前持仓状态
 请在此表格中更新您的最新持仓数据（份额、净值、可用资金等）。
 
 | 标的代码 | 名称           | 当前持有份额 | 最新净值 | 可用资金 |
@@ -18,13 +20,6 @@
 
 注：本脚本会自动解析 Markdown 表格，请保持表头名称一致。
 """
-
-import os
-import json
-import datetime
-import argparse
-import pandas as pd
-import akshare as ak
 
 # ================= 配置参数 =================
 TARGET_RATIO = {
@@ -242,6 +237,13 @@ def analyze_portfolio(df, momentum_top_code, indices_status):
     print("="*50 + "\n")
 
 def stage_pre_check():
+    # 检测并初始化 MD_FILE
+    is_new = False
+    if not os.path.exists(MD_FILE):
+        with open(MD_FILE, 'w', encoding='utf-8') as f:
+            f.write(TEMPLATE_MD)
+        is_new = True
+
     print("\n【阶段 1：首轮启动 - 宏观全景态势报告】")
     momentum_stats = fetch_momentum_data()
     top_1_code = None
@@ -261,6 +263,14 @@ def stage_pre_check():
                 print(f" - 大盘 {s['name']} 指数：未跌入信号区，距极端回撤抄底线索差距还有 {gap*100:.2f}% (水位计读数相对 MA120 为 {s['dist']*100:+.2f}%)")
             else:
                 print(f" - 大盘 {s['name']} 指数：🔴 系统击穿！已沉没到 MA120 超卖区域极端信号！(水位计读数相对 MA120 为 {s['dist']*100:+.2f}%)，警报发酵。")
+
+    print("\n[配置环境检查]：")
+    print(f" -> 关联的底层持仓面板文件 `{MD_FILE}` 就绪。")
+    if is_new:
+        print("\n=== 初始化持仓模版内容如下 ===")
+        print(TEMPLATE_MD)
+        print("==============================\n")
+        print("💡 [环境安装提示]：系统已由于初次运行为您建立好了默认的 current_portfolio.md 持仓面板。\n请打开该文件并填装您的真实仓位信息；如果您选择不填写，系统计算引擎将以此默认值作为基础投入数据流直接执行测算。")
 
 def stage_analyze():
     print("\n【阶段 2：Markdown 快照比查与深度解析】")
