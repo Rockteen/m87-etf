@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import io
 import json
 import datetime
 import argparse
@@ -91,7 +92,8 @@ def fetch_index_radar(quiet: bool = False) -> list[dict[str, Any]]:
             print(f"[!] 获取指数 {code} 历史数据失败: {e}", flush=True)
     return stats
 
-def parse_md_table(filepath: str) -> pd.DataFrame | None:
+def _extract_table_text(filepath: str) -> str | None:
+    """Extract only the Markdown table body from the file, skipping non-table lines."""
     if not os.path.exists(filepath):
         return None
     with open(filepath, 'r', encoding='utf-8') as f:
@@ -100,32 +102,43 @@ def parse_md_table(filepath: str) -> pd.DataFrame | None:
     table_lines: list[str] = []
     in_table = False
     for line in lines:
-        if '|' in line and '标的代码' in line:
-            in_table = True
-            table_lines.append(line.strip())
+        stripped = line.strip()
+        if not stripped:
+            if in_table:
+                break
             continue
-        if in_table:
-            # 遇到空行或不再是带有 | 的行为表格结束
-            if not line.strip() or not line.strip().startswith('|'):
-                if '|' not in line:
-                    break
-            if '|' in line:
-                table_lines.append(line.strip())
+        if '|' in stripped and '标的代码' in stripped:
+            in_table = True
+        if in_table and '|' in stripped:
+            table_lines.append(stripped)
 
     if not table_lines:
         return None
+    return '\n'.join(table_lines)
 
-    cleaned: list[list[str]] = []
-    for line in table_lines:
-        line = line.strip()
-        if line.startswith('|'): line = line[1:]
-        if line.endswith('|'): line = line[:-1]
-        cleaned.append([c.strip() for c in line.split('|')])
 
-    header = cleaned[0]
-    data = cleaned[2:] # 跳过分割线 (---|---)
-    df = pd.DataFrame(data, columns=header)
-    return df
+def parse_md_table(filepath: str) -> pd.DataFrame | None:
+    """Parse a Markdown pipe table from file into a pandas DataFrame."""
+    table_text = _extract_table_text(filepath)
+    if not table_text:
+        return None
+
+    try:
+        df = pd.read_csv(
+            io.StringIO(table_text),
+            sep='|',
+            skipinitialspace=True,
+        ).dropna(axis=1, how='all')
+        df.columns = df.columns.str.strip()
+        df = df.apply(lambda col: col.map(lambda x: x.strip() if isinstance(x, str) else x))
+        # Drop the separator row (---|---)
+        if len(df) > 1:
+            first_cell = str(df.iloc[0, 0])
+            if first_cell.startswith('-') or first_cell.startswith(':-'):
+                df = df.iloc[1:].reset_index(drop=True)
+        return df
+    except Exception:
+        return None
 
 def check_state_changes(current_df: pd.DataFrame) -> None:
     current_state: dict[str, float] = {}
