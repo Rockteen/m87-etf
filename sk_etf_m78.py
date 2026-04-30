@@ -208,12 +208,12 @@ def analyze_portfolio(df, momentum_top_code, indices_status):
             print(" -> 评级结论：底仓架构配比极其健康稳定，无需再平衡。")
             action_items.append("现行底仓阵型比例稳固，无需发起纠偏再平衡指令。")
     else:
-         print(" -> 未在 Markdown 持仓表中嗅探到目标底仓（513630/515180/513500）的市值数据流，偏差矩阵拒绝计算。")
+         print(f" -> 未在 Markdown 持仓表中嗅探到目标底仓({'/'.join(TARGET_RATIO.keys())})的市值数据流，偏差矩阵拒绝计算。")
 
     print("\n[2. 风险阈值与宏观预警信号感知]")
     triggered_indices = [idx['name'] for idx in indices_status if idx['trigger']]
     if triggered_indices:
-        print(" -> [高危预警]：大盘波动跌穿阈值极限！重点预警：{','.join(triggered_indices)} 近期跌落超 MA120 线 6% ！盘面已正式滑入机构派发的高胜率左侧深水大击球区！")
+        print(" -> [高危预警]：大盘波动跌穿阈值极限！重点预警：{', '.join(triggered_indices)} 近期跌落超 MA120 线 6% ！盘面已正式滑入机构派发的高胜率左侧深水大击球区！")
     else:
         print(" -> [平流层提示]：核心宽基指数网带健康平滑，全线均未击穿系统设定的崩溃抄底防线。在此背景下建议恪守绝对纪律跑完标准动量定投，严禁任何主观操作带来的单次超限违规重仓。")
         
