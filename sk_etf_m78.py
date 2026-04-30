@@ -167,8 +167,10 @@ def check_state_changes(current_df: pd.DataFrame) -> None:
             verb = "增加" if diff > 0 else "减少"
             changes.append(f"{code} 份额{verb} {abs(diff):.2f} 份")
 
-    with open(STATE_FILE, 'w', encoding='utf-8') as f:
+    tmp_path = STATE_FILE + '.tmp'
+    with open(tmp_path, 'w', encoding='utf-8') as f:
         json.dump(current_state, f)
+    os.replace(tmp_path, STATE_FILE)
 
     if changes:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
