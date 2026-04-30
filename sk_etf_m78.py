@@ -6,7 +6,9 @@ import io
 import json
 import datetime
 import argparse
-from typing import Any
+import functools
+import time
+from typing import Any, Callable
 
 import pandas as pd
 import akshare as ak
@@ -76,6 +78,55 @@ LOG_FILE: str = _config.get('log_file', _DEFAULT_LOG_FILE)
 STATE_FILE: str = _config.get('state_file', _DEFAULT_STATE_FILE)
 # ============================================
 
+def _retry(max_retries: int = 3, base_delay: float = 1.0) -> Callable:
+    """Decorator: retry a function on exception with exponential backoff."""
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            last_exc: Exception | None = None
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exc = e
+                    if attempt < max_retries:
+                        delay = base_delay * (2 ** attempt)
+                        time.sleep(delay)
+            raise last_exc  # type: ignore[misc]
+        return wrapper
+    return decorator
+
+
+def _session_cache(func: Callable) -> Callable:
+    """Decorator: cache function results within a single process lifetime."""
+    cache: dict[str, tuple[float, Any]] = {}
+    _TTL = 300  # 5-minute cache lifetime
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        key = f"{args}:{kwargs}"
+        now = time.time()
+        if key in cache:
+            cached_at, value = cache[key]
+            if now - cached_at < _TTL:
+                return value
+        result = func(*args, **kwargs)
+        cache[key] = (now, result)
+        return result
+    return wrapper
+
+
+@_retry(max_retries=2, base_delay=1.0)
+def _fetch_etf_hist(code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    return ak.fund_etf_hist_em(symbol=code, period="daily", start_date=start_date, end_date=end_date, adjust="")
+
+
+@_retry(max_retries=2, base_delay=1.0)
+def _fetch_index_daily(code: str) -> pd.DataFrame:
+    return ak.stock_zh_index_daily_em(symbol=code)
+
+
+@_session_cache
 def fetch_momentum_data(quiet: bool = False) -> list[dict[str, Any]]:
     if not quiet:
         print("\n[*] 正在扫描动量 ETF 候选池...")
@@ -87,7 +138,7 @@ def fetch_momentum_data(quiet: bool = False) -> list[dict[str, Any]]:
     stats: list[dict[str, Any]] = []
     for code in MOMENTUM_POOL:
         try:
-            df = ak.fund_etf_hist_em(symbol=code, period="daily", start_date=start_date, end_date=end_date, adjust="")
+            df = _fetch_etf_hist(code, start_date, end_date)
             if len(df) >= 20:
                 recent_close = float(df['收盘'].iloc[-1])
                 old_close = float(df['收盘'].iloc[-20])
@@ -99,13 +150,14 @@ def fetch_momentum_data(quiet: bool = False) -> list[dict[str, Any]]:
     stats = sorted(stats, key=lambda x: x['return'], reverse=True)
     return stats
 
+@_session_cache
 def fetch_index_radar(quiet: bool = False) -> list[dict[str, Any]]:
     if not quiet:
         print("[*] 正在扫描均值回归雷达 (MA120)...")
     stats: list[dict[str, Any]] = []
     for code, name in INDEX_POOL.items():
         try:
-            df = ak.stock_zh_index_daily_em(symbol=code)
+            df = _fetch_index_daily(code)
             if len(df) >= 120:
                 df['ma120'] = df['close'].rolling(window=120).mean()
                 latest_close = float(df['close'].iloc[-1])
