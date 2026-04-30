@@ -11,6 +11,12 @@ from typing import Any
 import pandas as pd
 import akshare as ak
 
+try:
+    import yaml
+    _HAS_YAML = True
+except ImportError:
+    _HAS_YAML = False
+
 TEMPLATE_MD = """# 当前持仓状态
 请在此表格中更新您的最新持仓数据（份额、净值、可用资金等）。
 
@@ -25,23 +31,49 @@ TEMPLATE_MD = """# 当前持仓状态
 """
 
 # ================= 配置参数 =================
-TARGET_RATIO: dict[str, float] = {
-    '513630': 0.3, # 港股低波红利
-    '515180': 0.3, # 易方达红利
-    '513500': 0.4  # 标普500
+_DEFAULT_TARGET_RATIO: dict[str, float] = {
+    '513630': 0.3,
+    '515180': 0.3,
+    '513500': 0.4,
 }
-MOMENTUM_POOL: list[str] = ['159929', '159530', '513630', '513010', '513500', '159941']
-INDEX_POOL: dict[str, str] = {
+_DEFAULT_MOMENTUM_POOL: list[str] = ['159929', '159530', '513630', '513010', '513500', '159941']
+_DEFAULT_INDEX_POOL: dict[str, str] = {
     'sh000001': '上证指数',
-    'sh000300': '沪深300'
+    'sh000300': '沪深300',
 }
-EXTREME_VALUATION_THRESHOLD: float = -0.06
-MOMENTUM_INVEST_AMOUNT: int = 30000
-EXTREME_INVEST_AMOUNT: int = 120000
+_DEFAULT_EXTREME_VALUATION_THRESHOLD: float = -0.06
+_DEFAULT_MOMENTUM_INVEST_AMOUNT: int = 30000
+_DEFAULT_EXTREME_INVEST_AMOUNT: int = 120000
+_DEFAULT_MD_FILE: str = 'current_portfolio.md'
+_DEFAULT_LOG_FILE: str = 'position_changes_log.md'
+_DEFAULT_STATE_FILE: str = '.last_portfolio_state.json'
+_CONFIG_FILE: str = 'config.yaml'
 
-MD_FILE: str = 'current_portfolio.md'
-LOG_FILE: str = 'position_changes_log.md'
-STATE_FILE: str = '.last_portfolio_state.json'
+def _load_config() -> dict[str, Any]:
+    """Load configuration from config.yaml, falling back to built-in defaults."""
+    cfg: dict[str, Any] = {}
+    if _HAS_YAML and os.path.exists(_CONFIG_FILE):
+        try:
+            with open(_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                cfg = yaml.safe_load(f) or {}
+        except Exception as e:
+            print(f"[!] 读取 {_CONFIG_FILE} 失败，使用默认配置: {e}", flush=True)
+    elif not _HAS_YAML and os.path.exists(_CONFIG_FILE):
+        print(f"[!] 检测到 {_CONFIG_FILE} 但未安装 pyyaml，使用默认配置。请执行: pip install pyyaml", flush=True)
+
+    return cfg
+
+_config = _load_config()
+
+TARGET_RATIO: dict[str, float] = _config.get('target_ratio', _DEFAULT_TARGET_RATIO)
+MOMENTUM_POOL: list[str] = _config.get('momentum_pool', _DEFAULT_MOMENTUM_POOL)
+INDEX_POOL: dict[str, str] = _config.get('index_pool', _DEFAULT_INDEX_POOL)
+EXTREME_VALUATION_THRESHOLD: float = _config.get('extreme_valuation_threshold', _DEFAULT_EXTREME_VALUATION_THRESHOLD)
+MOMENTUM_INVEST_AMOUNT: int = _config.get('momentum_invest_amount', _DEFAULT_MOMENTUM_INVEST_AMOUNT)
+EXTREME_INVEST_AMOUNT: int = _config.get('extreme_invest_amount', _DEFAULT_EXTREME_INVEST_AMOUNT)
+MD_FILE: str = _config.get('md_file', _DEFAULT_MD_FILE)
+LOG_FILE: str = _config.get('log_file', _DEFAULT_LOG_FILE)
+STATE_FILE: str = _config.get('state_file', _DEFAULT_STATE_FILE)
 # ============================================
 
 def fetch_momentum_data(quiet: bool = False) -> list[dict[str, Any]]:

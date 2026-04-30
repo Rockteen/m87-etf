@@ -1,0 +1,36 @@
+# ETF M78-Alpha 策略配置文件
+# 修改此文件后重新运行脚本即可生效，无需改动 Python 源码。
+
+# 底仓目标配比（标的代码 -> 目标权重）
+target_ratio:
+  "513630": 0.3   # 港股低波红利
+  "515180": 0.3   # 易方达红利
+  "513500": 0.4   # 标普500
+
+# 动量定投候选池
+momentum_pool:
+  - "159929"   # 医药ETF
+  - "159530"   # 机器人ETF
+  - "513630"   # 港股通红利ETF
+  - "513010"   # 港股科技ETF
+  - "513500"   # 标普500ETF
+  - "159941"   # 纳指ETF
+
+# 均值回归监控宽基指数
+index_pool:
+  sh000001: 上证指数
+  sh000300: 沪深300
+
+# 极端估值触发阈值（低于 MA120 的比例）
+extreme_valuation_threshold: -0.06
+
+# 每月动量定投金额（元）
+momentum_invest_amount: 30000
+
+# 极端估值触发时的大额抄底金额（元）
+extreme_invest_amount: 120000
+
+# 持仓与状态文件路径
+md_file: current_portfolio.md
+log_file: position_changes_log.md
+state_file: .last_portfolio_state.json
