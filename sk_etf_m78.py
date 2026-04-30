@@ -58,8 +58,8 @@ def fetch_momentum_data(quiet=False):
                 old_close = float(df['收盘'].iloc[-20])
                 ret = (recent_close - old_close) / old_close
                 stats.append({'code': code, 'return': ret})
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[!] 获取 ETF {code} 历史数据失败: {e}", flush=True)
             
     stats = sorted(stats, key=lambda x: x['return'], reverse=True)
     return stats
@@ -85,8 +85,8 @@ def fetch_index_radar(quiet=False):
                     'close': latest_close,
                     'ma120': ma120
                 })
-        except Exception:
-             pass
+        except Exception as e:
+            print(f"[!] 获取指数 {code} 历史数据失败: {e}", flush=True)
     return stats
 
 def parse_md_table(filepath):
