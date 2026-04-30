@@ -5,6 +5,8 @@ import os
 import json
 import datetime
 import argparse
+from typing import Any
+
 import pandas as pd
 import akshare as ak
 
@@ -22,34 +24,34 @@ TEMPLATE_MD = """# 当前持仓状态
 """
 
 # ================= 配置参数 =================
-TARGET_RATIO = {
+TARGET_RATIO: dict[str, float] = {
     '513630': 0.3, # 港股低波红利
     '515180': 0.3, # 易方达红利
     '513500': 0.4  # 标普500
 }
-MOMENTUM_POOL = ['159929', '159530', '513630', '513010', '513500', '159941']
-INDEX_POOL = {
+MOMENTUM_POOL: list[str] = ['159929', '159530', '513630', '513010', '513500', '159941']
+INDEX_POOL: dict[str, str] = {
     'sh000001': '上证指数',
     'sh000300': '沪深300'
 }
-EXTREME_VALUATION_THRESHOLD = -0.06
-MOMENTUM_INVEST_AMOUNT = 30000
-EXTREME_INVEST_AMOUNT = 120000
+EXTREME_VALUATION_THRESHOLD: float = -0.06
+MOMENTUM_INVEST_AMOUNT: int = 30000
+EXTREME_INVEST_AMOUNT: int = 120000
 
-MD_FILE = 'current_portfolio.md'
-LOG_FILE = 'position_changes_log.md'
-STATE_FILE = '.last_portfolio_state.json'
+MD_FILE: str = 'current_portfolio.md'
+LOG_FILE: str = 'position_changes_log.md'
+STATE_FILE: str = '.last_portfolio_state.json'
 # ============================================
 
-def fetch_momentum_data(quiet=False):
+def fetch_momentum_data(quiet: bool = False) -> list[dict[str, Any]]:
     if not quiet:
         print("\n[*] 正在扫描动量 ETF 候选池...")
     today = datetime.datetime.now()
     # 扩大获取范围以确保能拿到至少20个交易日
     start_date = (today - datetime.timedelta(days=60)).strftime("%Y%m%d")
     end_date = today.strftime("%Y%m%d")
-    
-    stats = []
+
+    stats: list[dict[str, Any]] = []
     for code in MOMENTUM_POOL:
         try:
             df = ak.fund_etf_hist_em(symbol=code, period="daily", start_date=start_date, end_date=end_date, adjust="")
@@ -60,14 +62,14 @@ def fetch_momentum_data(quiet=False):
                 stats.append({'code': code, 'return': ret})
         except Exception as e:
             print(f"[!] 获取 ETF {code} 历史数据失败: {e}", flush=True)
-            
+
     stats = sorted(stats, key=lambda x: x['return'], reverse=True)
     return stats
 
-def fetch_index_radar(quiet=False):
+def fetch_index_radar(quiet: bool = False) -> list[dict[str, Any]]:
     if not quiet:
         print("[*] 正在扫描均值回归雷达 (MA120)...")
-    stats = []
+    stats: list[dict[str, Any]] = []
     for code, name in INDEX_POOL.items():
         try:
             df = ak.stock_zh_index_daily_em(symbol=code)
@@ -89,13 +91,13 @@ def fetch_index_radar(quiet=False):
             print(f"[!] 获取指数 {code} 历史数据失败: {e}", flush=True)
     return stats
 
-def parse_md_table(filepath):
+def parse_md_table(filepath: str) -> pd.DataFrame | None:
     if not os.path.exists(filepath):
         return None
     with open(filepath, 'r', encoding='utf-8') as f:
         lines = f.readlines()
-    
-    table_lines = []
+
+    table_lines: list[str] = []
     in_table = False
     for line in lines:
         if '|' in line and '标的代码' in line:
@@ -109,40 +111,40 @@ def parse_md_table(filepath):
                     break
             if '|' in line:
                 table_lines.append(line.strip())
-                
+
     if not table_lines:
         return None
-        
-    cleaned = []
+
+    cleaned: list[list[str]] = []
     for line in table_lines:
         line = line.strip()
         if line.startswith('|'): line = line[1:]
         if line.endswith('|'): line = line[:-1]
         cleaned.append([c.strip() for c in line.split('|')])
-        
+
     header = cleaned[0]
     data = cleaned[2:] # 跳过分割线 (---|---)
     df = pd.DataFrame(data, columns=header)
     return df
 
-def check_state_changes(current_df):
-    current_state = {}
+def check_state_changes(current_df: pd.DataFrame) -> None:
+    current_state: dict[str, float] = {}
     for _, row in current_df.iterrows():
         code = str(row.get('标的代码', '')).strip()
         try:
             shares = float(row.get('当前持有份额', 0))
-        except:
-            shares = 0
-            
+        except (ValueError, TypeError):
+            shares = 0.0
+
         if code:
             current_state[code] = shares
-            
-    last_state = {}
+
+    last_state: dict[str, float] = {}
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, 'r', encoding='utf-8') as f:
             last_state = json.load(f)
-            
-    changes = []
+
+    changes: list[str] = []
     all_codes = set(current_state.keys()).union(set(last_state.keys()))
     for code in all_codes:
         curr = current_state.get(code, 0)
@@ -151,10 +153,10 @@ def check_state_changes(current_df):
         if diff != 0:
             verb = "增加" if diff > 0 else "减少"
             changes.append(f"{code} 份额{verb} {abs(diff):.2f} 份")
-            
+
     with open(STATE_FILE, 'w', encoding='utf-8') as f:
         json.dump(current_state, f)
-        
+
     if changes:
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
@@ -167,13 +169,13 @@ def check_state_changes(current_df):
     else:
          print("\n[*] 较上次状态快照核对完毕，持平无变化。")
 
-def analyze_portfolio(df, momentum_top_code, indices_status):
+def analyze_portfolio(df: pd.DataFrame, momentum_top_code: str | None, indices_status: list[dict[str, Any]]) -> None:
     print("\n" + "="*50)
     print("【深 度 持 仓 分 析 与 辅 助 决 策】")
     print("="*50)
-    
-    total_target_value = 0
-    actual_values = {}
+
+    total_target_value: float = 0
+    actual_values: dict[str, float] = {}
     for _, row in df.iterrows():
         code = str(row.get('标的代码', '')).strip()
         if code in TARGET_RATIO:
@@ -183,19 +185,19 @@ def analyze_portfolio(df, momentum_top_code, indices_status):
                 val = shares * nav
                 actual_values[code] = val
                 total_target_value += val
-            except:
+            except (ValueError, TypeError):
                 pass
-            
+
     print("\n[1. 仓位偏离度纠偏分析]")
     rebalance_needed = False
-    action_items = []
-    
+    action_items: list[str] = []
+
     if total_target_value > 0:
         for code, target_pct in TARGET_RATIO.items():
             actual_val = actual_values.get(code, 0)
             actual_pct = actual_val / total_target_value if total_target_value else 0
             diff = actual_pct - target_pct
-            
+
             print(f" - {code}: 目标权重 {target_pct*100:.1f}% | 实际 {actual_pct*100:.1f}% | 偏差 {diff*100:+.1f}%")
             if abs(diff) > 0.05:
                 rebalance_needed = True
@@ -203,7 +205,7 @@ def analyze_portfolio(df, momentum_top_code, indices_status):
                     action_items.append(f"标的 {code} 仓位结构已超标，建议近期挂起该标的定投，将主粮资金倾斜分流至其他底仓。")
                 else:
                     action_items.append(f"标的 {code} 仓位结构不足偏低，建议在下次定投触发时执行单边倾斜补仓！")
-                    
+
         if not rebalance_needed:
             print(" -> 评级结论：底仓架构配比极其健康稳定，无需再平衡。")
             action_items.append("现行底仓阵型比例稳固，无需发起纠偏再平衡指令。")
@@ -213,30 +215,30 @@ def analyze_portfolio(df, momentum_top_code, indices_status):
     print("\n[2. 风险阈值与宏观预警信号感知]")
     triggered_indices = [idx['name'] for idx in indices_status if idx['trigger']]
     if triggered_indices:
-        print(" -> [高危预警]：大盘波动跌穿阈值极限！重点预警：{', '.join(triggered_indices)} 近期跌落超 MA120 线 6% ！盘面已正式滑入机构派发的高胜率左侧深水大击球区！")
+        print(f" -> [高危预警]：大盘波动跌穿阈值极限！重点预警：{', '.join(triggered_indices)} 近期跌落超 MA120 线 6% ！盘面已正式滑入机构派发的高胜率左侧深水大击球区！")
     else:
         print(" -> [平流层提示]：核心宽基指数网带健康平滑，全线均未击穿系统设定的崩溃抄底防线。在此背景下建议恪守绝对纪律跑完标准动量定投，严禁任何主观操作带来的单次超限违规重仓。")
-        
+
     print("\n[3. M78-Alpha : 最终行动执行序列清单]")
     idx = 1
     if momentum_top_code:
         print(f" {idx}. 执行挂单：立刻买入总额 {MOMENTUM_INVEST_AMOUNT} 元代号 {momentum_top_code} (这是本月轮动捕获到的绝对动量冠军标的)；")
         idx += 1
-    
+
     for action in action_items:
          print(f" {idx}. {action}")
          idx += 1
-         
+
     for id_stat in indices_status:
          if id_stat['trigger']:
              print(f" {idx}. -> 强行介入：由于触发左侧破净极端信号指令，本系统特别许可并建议对 {id_stat['name']} 关联宽基标的一把推入 {EXTREME_INVEST_AMOUNT} 元，做断头侧抄底防守；")
              idx += 1
-             
+
     if not triggered_indices:
          print(f" {idx}. -> 巡检闭环：各中枢 MA120 未发极端信号，请继续持有流动大营预置重仓现金流。")
     print("="*50 + "\n")
 
-def stage_pre_check():
+def stage_pre_check() -> None:
     # 检测并初始化 MD_FILE
     is_new = False
     if not os.path.exists(MD_FILE):
@@ -253,7 +255,7 @@ def stage_pre_check():
             print(f" Top {i+1}: 代号 {s['code']} 滚动录得 {s['return']*100:.2f}% 收益率")
         top_1_code = momentum_stats[0]['code']
         print(f" -> 首检判决项：针对本自然月度 {MOMENTUM_INVEST_AMOUNT} 元的动量专项定额定投发力点，唯一锁定到 【{top_1_code}】")
-        
+
     indices_stats = fetch_index_radar()
     if indices_stats:
         print(f"\n[估值塌陷雷达侦测]：")
@@ -272,25 +274,25 @@ def stage_pre_check():
         print("==============================\n")
         print("[环境安装提示]：系统已由于初次运行为您建立好了默认的 current_portfolio.md 持仓面板。\n请打开该文件并填装您的真实仓位信息；如果您选择不填写，系统计算引擎将以此默认值作为基础投入数据流直接执行测算。")
 
-def stage_analyze():
+def stage_analyze() -> None:
     print("\n【阶段 2：Markdown 快照比查与深度解析】")
     df = parse_md_table(MD_FILE)
     if df is None or df.empty:
         print(f"[!] 错误终止：根本就无法识别目录树里包含 {MD_FILE} 在内的物理表格数据。")
         print("[注解引导]：由于缺少基础材料，请回看主程序代码中的注释范本创建一个标准的 Markdown 多维表。")
         return
-        
+
     check_state_changes(df)
-    
+
     # 静默在内存中复刻环境
     momentum_stats = fetch_momentum_data(quiet=True)
     top_1_code = momentum_stats[0]['code'] if momentum_stats else None
     indices_stats = fetch_index_radar(quiet=True)
-    
+
     # 把参数推上手术台
     analyze_portfolio(df, top_1_code, indices_stats)
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="ETF M78-Alpha Agent Local Engine")
     parser.add_argument('--stage', choices=['pre-check', 'analyze', 'all'], default='all', help='指定要运行在流水线中的具体执行阶段')
     args = parser.parse_args()
@@ -301,7 +303,7 @@ def main():
 
     if args.stage in ['pre-check', 'all']:
         stage_pre_check()
-        
+
     if args.stage in ['analyze', 'all']:
         stage_analyze()
 
