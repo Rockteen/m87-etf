@@ -41,8 +41,8 @@ LOG_FILE = 'position_changes_log.md'
 STATE_FILE = '.last_portfolio_state.json'
 # ============================================
 
-def fetch_momentum_data(silent=False):
-    if not silent:
+def fetch_momentum_data(quiet=False):
+    if not quiet:
         print("\n[*] 正在扫描动量 ETF 候选池...")
     today = datetime.datetime.now()
     # 扩大获取范围以确保能拿到至少20个交易日
@@ -64,8 +64,8 @@ def fetch_momentum_data(silent=False):
     stats = sorted(stats, key=lambda x: x['return'], reverse=True)
     return stats
 
-def fetch_index_radar(silent=False):
-    if not silent:
+def fetch_index_radar(quiet=False):
+    if not quiet:
         print("[*] 正在扫描均值回归雷达 (MA120)...")
     stats = []
     for code, name in INDEX_POOL.items():
@@ -125,7 +125,7 @@ def parse_md_table(filepath):
     df = pd.DataFrame(data, columns=header)
     return df
 
-def check_state_diff(current_df):
+def check_state_changes(current_df):
     current_state = {}
     for _, row in current_df.iterrows():
         code = str(row.get('标的代码', '')).strip()
@@ -213,9 +213,9 @@ def analyze_portfolio(df, momentum_top_code, indices_status):
     print("\n[2. 风险阈值与宏观预警信号感知]")
     triggered_indices = [idx['name'] for idx in indices_status if idx['trigger']]
     if triggered_indices:
-        print(f" -> ⚠️ 高危预警：大盘波动跌穿阈值极限！重点预警：{','.join(triggered_indices)} 近期跌落超 MA120 线 6% ！盘面已正式滑入机构派发的高胜率左侧深水大击球区！")
+        print(" -> [高危预警]：大盘波动跌穿阈值极限！重点预警：{','.join(triggered_indices)} 近期跌落超 MA120 线 6% ！盘面已正式滑入机构派发的高胜率左侧深水大击球区！")
     else:
-        print(" -> 📉 平流层提示：核心宽基指数网带健康平滑，全线均未击穿系统设定的崩溃抄底防线。在此背景下建议恪守绝对纪律跑完标准动量定投，严禁任何主观操作带来的单次超限违规重仓。")
+        print(" -> [平流层提示]：核心宽基指数网带健康平滑，全线均未击穿系统设定的崩溃抄底防线。在此背景下建议恪守绝对纪律跑完标准动量定投，严禁任何主观操作带来的单次超限违规重仓。")
         
     print("\n[3. M78-Alpha : 最终行动执行序列清单]")
     idx = 1
@@ -229,11 +229,11 @@ def analyze_portfolio(df, momentum_top_code, indices_status):
          
     for id_stat in indices_status:
          if id_stat['trigger']:
-             print(f" {idx}. 👉 强行介入：由于触发左侧破净极端信号指令，本系统特别许可并建议对 {id_stat['name']} 关联宽基标的一把推入 {EXTREME_INVEST_AMOUNT} 元，做断头侧抄底防守；")
+             print(f" {idx}. -> 强行介入：由于触发左侧破净极端信号指令，本系统特别许可并建议对 {id_stat['name']} 关联宽基标的一把推入 {EXTREME_INVEST_AMOUNT} 元，做断头侧抄底防守；")
              idx += 1
              
     if not triggered_indices:
-         print(f" {idx}. 👉 巡检闭环：各中枢 MA120 未发极端信号，请继续持有流动大营预置重仓现金流。")
+         print(f" {idx}. -> 巡检闭环：各中枢 MA120 未发极端信号，请继续持有流动大营预置重仓现金流。")
     print("="*50 + "\n")
 
 def stage_pre_check():
@@ -270,22 +270,22 @@ def stage_pre_check():
         print("\n=== 初始化持仓模版内容如下 ===")
         print(TEMPLATE_MD)
         print("==============================\n")
-        print("💡 [环境安装提示]：系统已由于初次运行为您建立好了默认的 current_portfolio.md 持仓面板。\n请打开该文件并填装您的真实仓位信息；如果您选择不填写，系统计算引擎将以此默认值作为基础投入数据流直接执行测算。")
+        print("[环境安装提示]：系统已由于初次运行为您建立好了默认的 current_portfolio.md 持仓面板。\n请打开该文件并填装您的真实仓位信息；如果您选择不填写，系统计算引擎将以此默认值作为基础投入数据流直接执行测算。")
 
 def stage_analyze():
     print("\n【阶段 2：Markdown 快照比查与深度解析】")
     df = parse_md_table(MD_FILE)
     if df is None or df.empty:
         print(f"[!] 错误终止：根本就无法识别目录树里包含 {MD_FILE} 在内的物理表格数据。")
-        print("💡 注解引导：由于缺少基础材料，请回看主程序代码中的注释范本创建一个标准的 Markdown 多维表。")
+        print("[注解引导]：由于缺少基础材料，请回看主程序代码中的注释范本创建一个标准的 Markdown 多维表。")
         return
         
-    check_state_diff(df)
+    check_state_changes(df)
     
     # 静默在内存中复刻环境
-    momentum_stats = fetch_momentum_data(silent=True)
+    momentum_stats = fetch_momentum_data(quiet=True)
     top_1_code = momentum_stats[0]['code'] if momentum_stats else None
-    indices_stats = fetch_index_radar(silent=True)
+    indices_stats = fetch_index_radar(quiet=True)
     
     # 把参数推上手术台
     analyze_portfolio(df, top_1_code, indices_stats)
